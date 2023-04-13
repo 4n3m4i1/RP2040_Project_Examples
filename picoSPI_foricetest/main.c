@@ -11,7 +11,7 @@
 #define ARRAY_SIZE  4
 #define ENTER_PRESSED   13
 
-// Pin definitions, GPIO numbering 
+// Pin definitions, GPIO numbering
 const uint32_t cs_pin = 5;
 const uint32_t sck_pin = 2;
 const uint32_t spi_rx_pin = 4;
@@ -37,7 +37,7 @@ int main(){
 
     // SPI Initiation!
     spi_inst_t *spi_ctrl = spi0;        // Use SPI0
-    
+
     spi_init(spi_ctrl, 1000 * 1000);    // 1 MHz clk
 
     // Initialize SPI Format
@@ -57,7 +57,7 @@ int main(){
 
     // End SPI Initiation
 
-    printf("SPI%u Enabled at Baudrate: %u\n\n", 
+    printf("SPI%u Enabled at Baudrate: %u\n\n",
             spi_get_index(spi_ctrl), spi_get_baudrate(spi_ctrl));   // USB Debug Messages
 
 
@@ -70,14 +70,14 @@ int main(){
         char read_val = getchar_timeout_us(0);
 
         switch(read_val){
-            case '1':{
+            case 'L':{
                 gpio_put(LED, (!gpio_get(LED)));
                 busy_wait_us(1);
                 printf("LED %s!\n", ((gpio_get(LED)) ? "ON" : "OFF"));
             }
             break;
 
-            case '2':
+            case 'O':
                 gpio_put(LED, GPIO_OFF);
             break;
 
@@ -119,6 +119,28 @@ int main(){
 
                     printf("RX Data: 0x%02X\n",
                                 in_buffer[0]);
+                } else {
+                    printf("SPI Unavailable for write!\n");
+                }
+            }
+            break;
+
+            case '2':{       // Transmit 2 bytes 0th
+                printf("Send single byte\n");
+                int bytes_read;
+                if(spi_is_writable(spi_ctrl)){
+                    gpio_put(cs_pin, GPIO_OFF);     // Pull CS low
+                    bytes_read = spi_write_read_blocking(spi_ctrl, (const uint8_t *)out_buffer, in_buffer, 2);
+                    gpio_put(cs_pin, GPIO_ON);     // Pull CS high
+
+                    printf("\nSent %d bytes\n", 2);
+                    printf("Read %3d bytes\n", bytes_read);
+
+                    printf("TX Data: 0x%02X  0x%02X\n",
+                            out_buffer[0], out_buffer[1]);
+
+                    printf("RX Data: 0x%02X  0x%02X\n",
+                                in_buffer[0], in_buffer[1]);
                 } else {
                     printf("SPI Unavailable for write!\n");
                 }
@@ -169,8 +191,8 @@ int main(){
                             out_buffer[0], out_buffer[1], out_buffer[2], out_buffer[3]);
             break;
         }
-        
-    }    
+
+    }
 }
 
 
