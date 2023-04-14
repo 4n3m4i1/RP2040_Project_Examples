@@ -1,4 +1,8 @@
 
+#define MIDI_BAUD       31250u
+
+#define MIDI_TX_PIN     0u
+#define MIDI_RX_PIN     1u
 
 // Create command/status byte from a message type and channel input
 #define CREATE_CMD(m, c)    (m  | (c & 0x0F))
@@ -22,6 +26,7 @@
 #define LEN_PITCH_BEND      3
 // System messaging is arbitrary length
 
+#define STD_MSG_LEN         3
 
 
 // System Messaging Status Bytes
@@ -33,3 +38,38 @@
 #define SYS_UNDEFINED_1     0xFD
 #define SYS_ACTIVE_SENSE    0xFE
 #define SYS_RESET           0xFF
+
+
+
+
+
+// Octaves
+#define OCTAVE_0        1
+#define OCTAVE_1        2
+#define OCTAVE_2        3
+#define OCTAVE_3        4
+#define OCTAVE_4        5
+#define OCTAVE_5        6
+#define OCTAVE_6        7
+#define OCTAVE_7        8
+#define OCTAVE_8        9
+
+// Key -> val, Midi byte value
+#define MIDDLE_C_KEY    60
+
+// Velocities
+#define DEFAULT_VELOCITY    100
+
+// Notes
+#define DEFAULT_BASE_A0             21
+#define DEFAULT_BASE_C1             24 - LOW_PIN
+#define DEFAULT_NOTES_PER_OCTAVE    12
+
+// Notes reference
+//https://studiocode.dev/resources/midi-middle-c/
+
+
+// Channel management
+#define FREE_CHANNEL    0xFF
+#define CLAIM_CHANNEL   0x01
+#define RELEASE_CHANNEL 0x00

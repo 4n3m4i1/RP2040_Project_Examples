@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(PICO_EXAMPLES_PATH ${PROJECT_SOURCE_DIR})
 
-target_include_directories(${PROJECT_NAME} .)
+#target_include_directories(${PROJECT_NAME} .)
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
