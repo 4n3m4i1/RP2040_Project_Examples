@@ -225,6 +225,8 @@ void send_midi_message(uart_inst_t *uart, struct MIDI_MESSAGE *msg){
     for(uint n = 0; n < msg->length; n++){
         uart_putc_raw(uart, msg->payload[n]);
     }
+
+    //uart_putc_raw(uart, msg->payload[0]);
 }
 
 
@@ -271,7 +273,7 @@ uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboar
                 
                 int8_t ch_arb = channel_arbitration(voiceStates, (uint8_t)n, ((gpio_vals & (changed_pins & (1 << n))) ? 0 : 1));
                 if(ch_arb > -1){
-                    msg.payload[0] = (( gpio_get(n) != 0 ) ? NOTE_OFF : NOTE_ON) | ch_arb;
+                    msg.payload[0] = (( gpio_get(n) != 0 ) ? NOTE_ON : NOTE_OFF) | ch_arb;
                     msg.payload[1] = (keyboard->key_note[n - LOW_PIN]) + (keyboard->current_octave * 0x0C);     // key pressed is an offset from base C note (set by octave selection)
                     msg.payload[2] = keyboard->key_velocity[(n - LOW_PIN)];                                     // If velocity is enabled, apply here
                     send_midi_message(uart0, &msg);
