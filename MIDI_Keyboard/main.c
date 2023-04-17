@@ -99,6 +99,8 @@ void send_midi_message(uart_inst_t *uart, struct MIDI_MESSAGE *msg);
 
 uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboard, struct VoiceStates *voiceStates);
 int8_t channel_arbitration(struct VoiceStates *voices, uint8_t pin_requesting, uint8_t operation);
+
+void check_configuration(struct KeyboardKeys *keyboard);    // check mailbox to apply config
 ///////////////////// MAIN //////////////////////////////
 int main(){                 // Main for Core 0, Comms and processing Done here
 #ifdef DEBUG_MODE
@@ -124,7 +126,7 @@ int main(){                 // Main for Core 0, Comms and processing Done here
 
     while(1){
         if(gpio_get(ENCODER_BUTTON)) process_keyboard_inputs(uart0, &keyboard, &voices);
-      
+        else check_configuration(&keyboard);
 
         busy_wait_ms(50);
     }
@@ -231,6 +233,17 @@ void core_1_entry(){        // Main for Core 1, Motor PWM driven here
                     wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x03);
                     send_midi_message(uart0, &wave_change);
                     busy_wait_ms(100);
+                } else
+
+                if(!gpio_get(NOTE_C_UPPER)){        // Octave up
+                    //if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+                    multicore_fifo_push_blocking(1);
+                    busy_wait_ms(300);
+                } else
+                if(!gpio_get(NOTE_B)){              // Octave Down
+                    //if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
+                    multicore_fifo_push_blocking(-1);
+                    busy_wait_ms(300);
                 }
             }
             
@@ -258,6 +271,17 @@ void setup_i2C(i2c_inst_t* i2c){
     i2c_set_slave_mode(i2c, 0, I2C_ADDR);
 }
 
+void check_configuration(struct KeyboardKeys *keyboard){
+    if(multicore_fifo_rvalid()){
+        int rv = multicore_fifo_pop_blocking();
+
+        if(rv < 0){
+            if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
+        } else {
+            if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+        }
+    }
+}
 
 
 // Setup for Keyboard Buttons
