@@ -6,6 +6,7 @@
 #include "hardware/timer.h"
 #include "hardware/pwm.h"
 
+
 #include "midi_commands.h"
 
 #define DEBUG_MODE
@@ -87,7 +88,8 @@ struct MIDI_MESSAGE{
 //struct MIDI_MESSAGE *keypress_table[13] (struct KeyboardKeys *keystruct);
 
 ////////////// Function Defs //////////////////////////////
-void core_1_entry();        // Main for Core 1
+void core_1_entry();      
+void setup_i2C(i2c_inst_t* i2c);
 
 void keyboard_struct_init(struct KeyboardKeys *keystruct);
 void setup_Keyboard_Keys(struct KeyboardKeys *keystruct);
@@ -121,10 +123,10 @@ int main(){                 // Main for Core 0, Comms and processing Done here
     printf("Welcome to MIDI RP2040!\n\n");
 
     while(1){
-        process_keyboard_inputs(uart0, &keyboard, &voices);
+        if(gpio_get(ENCODER_BUTTON)) process_keyboard_inputs(uart0, &keyboard, &voices);
       
 
-        busy_wait_ms(100);
+        busy_wait_ms(50);
     }
 
 }
@@ -134,12 +136,119 @@ void core_1_entry(){        // Main for Core 1, Motor PWM driven here
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
-   
+   // setup_i2C(i2c1);
+
+    gpio_put(LED_PIN, 1);
+
+
+    gpio_init(ENCODER_BUTTON);
+    gpio_set_pulls(ENCODER_BUTTON, 1, 0);
+    gpio_set_input_enabled(ENCODER_BUTTON, 1);
+
+    /*
+        0   Sin
+        1   Tri
+        2   Square
+        3   Saw
+    */
+    uint8_t current_wave = 0;
+
+    while(1){
+        if(!gpio_get(ENCODER_BUTTON)){                  // Enter set wave mode
+
+            gpio_put(LED_PIN, 1);
+            busy_wait_ms(300);
+            gpio_put(LED_PIN, 0);
+
+            switch(current_wave){
+                case 0:                     // 1 beep for sin
+                    busy_wait_ms(500);
+                    gpio_put(LED_PIN, 1);
+                break;
+
+                case 1:                     // 2 beeps for tri
+                    busy_wait_ms(250);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(250);
+                    gpio_put(LED_PIN, 0);
+                break;
+
+                case 2:                     // 3 beeps for square
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 0);
+                break;
+
+                case 3:                     // 4 beeps for saw
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                break;
+            }
+            
+            busy_wait_ms(200);
+            gpio_put(LED_PIN, 1);
+
+            printf("Edit Mode. New Wave = %2d\n", current_wave);
+
+            struct MIDI_MESSAGE wave_change;
+            wave_change.length = STD_MSG_LEN;
+
+            wave_change.payload[1] = 0x00;      // Controller number
+            wave_change.payload[2] = current_wave;
+
+            while(!gpio_get(ENCODER_BUTTON)){
+                if(!gpio_get(NOTE_C_LOWER)){
+                wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x00);
+                send_midi_message(uart0, &wave_change);
+                busy_wait_ms(100);    
+                } else
+                if(!gpio_get(NOTE_D)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x01);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                } else
+                if(!gpio_get(NOTE_E)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x02);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                } else
+                if(!gpio_get(NOTE_F)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x03);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                }
+            }
+            
+
+            if(current_wave < 3) current_wave += 1;
+            else current_wave = 0;
+
+            busy_wait_ms(10);
+        
+        } else {
+            if(gpio_get(LED_PIN)) gpio_put(LED_PIN, 0);
+        }
+    } 
 
 }
 
 ////////////////////// FUNctions //////////////////////////
-/*
+
 void setup_i2C(i2c_inst_t* i2c){
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
@@ -148,7 +257,7 @@ void setup_i2C(i2c_inst_t* i2c){
     i2c_init(i2c, FAST_I2C_FREQ);
     i2c_set_slave_mode(i2c, 0, I2C_ADDR);
 }
-*/
+
 
 
 // Setup for Keyboard Buttons
@@ -234,7 +343,7 @@ int8_t channel_arbitration(struct VoiceStates *voices, uint8_t pin_requesting, u
     // Operations: 1 -> Claim Voice, 0 -> Release Voice
     int8_t ret_channel = -1;
 
-    printf("Pin %2d Requesting %s\t", pin_requesting, ((operation != 0) ? "Claim" : "Free "));
+  //  printf("Pin %2d Requesting %s\t", pin_requesting, ((operation != 0) ? "Claim" : "Free "));
 
 
     if(operation){                              // Claim new, or reclaim existing channel
@@ -277,9 +386,9 @@ uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboar
                     msg.payload[1] = (keyboard->key_note[n - LOW_PIN]) + (keyboard->current_octave * 0x0C);     // key pressed is an offset from base C note (set by octave selection)
                     msg.payload[2] = keyboard->key_velocity[(n - LOW_PIN)];                                     // If velocity is enabled, apply here
                     send_midi_message(uart0, &msg);
-                    printf("Channel %1d %s: 0x%02X  0x%02X  0x%02X\n", ch_arb, (((msg.payload[0] & 0xF0) == NOTE_ON) ? "Assigned" : "Released"), msg.payload[0], msg.payload[1], msg.payload[2]);
+      //              printf("Channel %1d %s: 0x%02X  0x%02X  0x%02X\n", ch_arb, (((msg.payload[0] & 0xF0) == NOTE_ON) ? "Assigned" : "Released"), msg.payload[0], msg.payload[1], msg.payload[2]);
                 } else {
-                    printf("Channel Arbitration Failed! Code: 0x%02X\n", ch_arb);
+      //              printf("Channel Arbitration Failed! Code: 0x%02X\n", ch_arb);
                 }
 
                 
