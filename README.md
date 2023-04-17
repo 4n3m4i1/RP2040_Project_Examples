@@ -30,3 +30,16 @@ Serial Commands:
   
 Important Note: the RP2040 SDK LSB first parameter in the SPI format configuration appears  
 to do nothing, every transmission is MSB first.
+
+
+## MIDI Keyboard
+I needed a MIDI keyboard with an out and didn't have one, so here it is.  
+Supports dynamic channel allocation such that up to a specified `NUM_VOICES`  
+keys can be pressed at a time, but any presses over this value will not be registered  
+as a valid input. Of course the release of any pin will release the associated channel,  
+and the next press of any button will claim that channel.  
+  
+Support for Modulation, Volume, some arbitrary data, and octave switching coming soon,  
+most support is baked in but not broken out yet.  
+  
+(REMEMBER TO PUT THE BOARD PICTURE IN THE FOLDER)
