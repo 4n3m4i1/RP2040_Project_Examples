@@ -127,7 +127,13 @@ int main(){                 // Main for Core 0, Comms and processing Done here
 
     init_midi(uart0);
 
-    printf("Welcome to MIDI RP2040!\n\n");
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_put(LED_PIN, 1);
+
+    busy_wait_ms(500);
+
+    gpio_put(LED_PIN, 0);
 
     while(1){
         if(gpio_get(ENCODER_BUTTON)) process_keyboard_inputs(uart0, &keyboard, &voices);
@@ -189,13 +195,7 @@ void setup_i2C(i2c_inst_t* i2c){
 //  Button press pulls pin low, triggers ISR
 
 void setup_Keyboard_Keys(struct KeyboardKeys *keystruct){
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-
    // setup_i2C(i2c1);
-
-    gpio_put(LED_PIN, 1);
-
 
     gpio_init(ENCODER_BUTTON);
     gpio_set_pulls(ENCODER_BUTTON, 1, 0);
@@ -445,7 +445,7 @@ void check_for_encoder_press(struct KeyboardKeys *keyboard){
 
             busy_wait_ms(10);
         
-        } else {
-            if(gpio_get(LED_PIN)) gpio_put(LED_PIN, 0);
         }
+        
+        if(gpio_get(LED_PIN)) gpio_put(LED_PIN, 0);
 }
