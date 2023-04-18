@@ -73,3 +73,8 @@
 #define FREE_CHANNEL    0xFF
 #define CLAIM_CHANNEL   0x01
 #define RELEASE_CHANNEL 0x00
+
+#define CHANNEL_0       0x00
+#define CHANNEL_1       0x01
+#define CHANNEL_2       0x02
+#define CHANNEL_3       0x03

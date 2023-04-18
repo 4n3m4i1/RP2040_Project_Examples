@@ -388,8 +388,6 @@ void check_for_encoder_press(struct KeyboardKeys *keyboard){
             busy_wait_ms(200);
             gpio_put(LED_PIN, 1);
 
-            printf("Edit Mode. New Wave = %2d\n", current_wave);
-
             struct MIDI_MESSAGE wave_change;
             wave_change.length = STD_MSG_LEN;
 
@@ -397,45 +395,34 @@ void check_for_encoder_press(struct KeyboardKeys *keyboard){
             wave_change.payload[2] = current_wave;
 
             while(!gpio_get(ENCODER_BUTTON)){
-                uint8_t rv = 0;
-
                 if(!gpio_get(NOTE_C_LOWER)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x00);
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, CHANNEL_0);
                     send_midi_message(uart0, &wave_change);
                     busy_wait_ms(100);    
                 } else
                 if(!gpio_get(NOTE_D)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x01);
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, CHANNEL_1);
                     send_midi_message(uart0, &wave_change);
                     busy_wait_ms(100);
                 } else
                 if(!gpio_get(NOTE_E)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x02);
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, CHANNEL_2);
                     send_midi_message(uart0, &wave_change);
                     busy_wait_ms(100);
                 } else
                 if(!gpio_get(NOTE_F)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x03);
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, CHANNEL_3);
                     send_midi_message(uart0, &wave_change);
                     busy_wait_ms(100);
                 } else
 
                 if(!gpio_get(NOTE_C_UPPER)){        // Octave up
-                    //if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
-                    rv = 1;
-                    busy_wait_ms(300);
+                    if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+                    busy_wait_ms(400);
                 } else
                 if(!gpio_get(NOTE_B)){              // Octave Down
-                    //if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
-                    rv = -1;
-                    busy_wait_ms(300);
-                }
-
-                if(rv < 0){
                     if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
-                } else 
-                if(rv) {
-                    if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+                    busy_wait_ms(400);
                 }
             }
             
