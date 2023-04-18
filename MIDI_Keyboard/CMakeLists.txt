@@ -15,11 +15,19 @@ pico_sdk_init()
 
 add_executable(
                 ${PROJECT_NAME}
-                main.c
+               # main.c
                 )
 
+target_sources(
+                ${PROJECT_NAME} PUBLIC
+                ${CMAKE_CURRENT_LIST_DIR}/main.c
+                ${CMAKE_CURRENT_LIST_DIR}/usb_descriptors.c
+                )
 
-
+# Make sure TinyUSB can find tusb_config.h
+target_include_directories(
+                            ${PROJECT_NAME} PUBLIC
+                            ${CMAKE_CURRENT_LIST_DIR})
 
 # Link Libraries
 target_link_libraries(
@@ -29,12 +37,13 @@ target_link_libraries(
                         hardware_i2c
                         hardware_timer
                         hardware_pwm
-
-
+                        tinyusb_device
+                        tinyusb_board
                         )
 
-pico_enable_stdio_usb(${PROJECT_NAME} 1)
-pico_enable_stdio_uart(${PROJECT_NAME} 0)
+# Do not use, tinyUSB replaces
+#pico_enable_stdio_usb(${PROJECT_NAME} 1)
+#pico_enable_stdio_uart(${PROJECT_NAME} 0)
 
 # Create EXEC binaries like uf2
 pico_add_extra_outputs(${PROJECT_NAME})

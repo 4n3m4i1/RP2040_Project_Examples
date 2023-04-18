@@ -9,7 +9,10 @@
 
 #include "midi_commands.h"
 
-#define DEBUG_MODE
+#include "bsp/board.h"
+#include "tusb.h"
+
+
 
 #define LED_PIN         25ul    // On board LED
 
@@ -100,12 +103,14 @@ void send_midi_message(uart_inst_t *uart, struct MIDI_MESSAGE *msg);
 uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboard, struct VoiceStates *voiceStates);
 int8_t channel_arbitration(struct VoiceStates *voices, uint8_t pin_requesting, uint8_t operation);
 
-void check_configuration(struct KeyboardKeys *keyboard);    // check mailbox to apply config
+
+void check_for_encoder_press(struct KeyboardKeys *keyboard);
+void midi_task(uart_inst_t *uart);
 ///////////////////// MAIN //////////////////////////////
 int main(){                 // Main for Core 0, Comms and processing Done here
-#ifdef DEBUG_MODE
-    stdio_init_all();
-#endif
+
+    board_init();
+    tusb_init();
 
     multicore_launch_core1(core_1_entry);
 
@@ -126,7 +131,8 @@ int main(){                 // Main for Core 0, Comms and processing Done here
 
     while(1){
         if(gpio_get(ENCODER_BUTTON)) process_keyboard_inputs(uart0, &keyboard, &voices);
-        else check_configuration(&keyboard);
+        else check_for_encoder_press(&keyboard);
+
 
         busy_wait_ms(50);
     }
@@ -134,7 +140,52 @@ int main(){                 // Main for Core 0, Comms and processing Done here
 }
 
 void core_1_entry(){        // Main for Core 1, Motor PWM driven here
+    while(1){
+        tud_task(); // tinyusb device task
+        midi_task(uart0);
+    } 
 
+}
+
+////////////////////// FUNctions //////////////////////////
+void midi_task(uart_inst_t *uart){
+// This does not work
+    uint8_t packet[4];
+    while ( tud_midi_available() ) tud_midi_packet_read(packet);
+
+    if((packet[0] & 0xF0 == NOTE_ON) || (packet[0] & 0xF0 == NOTE_OFF)){
+        gpio_put(LED_PIN, ~gpio_get(LED_PIN));
+        struct MIDI_MESSAGE msg;
+        msg.length = STD_MSG_LEN;
+        msg.payload[0] = packet[0];
+        msg.payload[1] = packet[1];
+        msg.payload[2] = packet[2];        
+    } else
+    if((packet[1] & 0xF0 == NOTE_ON) || (packet[1] & 0xF0 == NOTE_OFF)){
+        gpio_put(LED_PIN, ~gpio_get(LED_PIN));
+        struct MIDI_MESSAGE msg;
+        msg.length = STD_MSG_LEN;
+        msg.payload[0] = packet[1];
+        msg.payload[1] = packet[2];
+        msg.payload[2] = packet[3];        
+    }
+}
+
+
+void setup_i2C(i2c_inst_t* i2c){
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SCL);
+    gpio_pull_up(I2C_SDA);
+    i2c_init(i2c, FAST_I2C_FREQ);
+    i2c_set_slave_mode(i2c, 0, I2C_ADDR);
+}
+
+
+// Setup for Keyboard Buttons
+//  Button press pulls pin low, triggers ISR
+
+void setup_Keyboard_Keys(struct KeyboardKeys *keystruct){
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
@@ -147,147 +198,6 @@ void core_1_entry(){        // Main for Core 1, Motor PWM driven here
     gpio_set_pulls(ENCODER_BUTTON, 1, 0);
     gpio_set_input_enabled(ENCODER_BUTTON, 1);
 
-    /*
-        0   Sin
-        1   Tri
-        2   Square
-        3   Saw
-    */
-    uint8_t current_wave = 0;
-
-    while(1){
-        if(!gpio_get(ENCODER_BUTTON)){                  // Enter set wave mode
-
-            gpio_put(LED_PIN, 1);
-            busy_wait_ms(300);
-            gpio_put(LED_PIN, 0);
-
-            switch(current_wave){
-                case 0:                     // 1 beep for sin
-                    busy_wait_ms(500);
-                    gpio_put(LED_PIN, 1);
-                break;
-
-                case 1:                     // 2 beeps for tri
-                    busy_wait_ms(250);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(250);
-                    gpio_put(LED_PIN, 0);
-                break;
-
-                case 2:                     // 3 beeps for square
-                    busy_wait_ms(150);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(150);
-                    gpio_put(LED_PIN, 0);
-                    busy_wait_ms(150);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(150);
-                    gpio_put(LED_PIN, 0);
-                break;
-
-                case 3:                     // 4 beeps for saw
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 0);
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 0);
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 1);
-                    busy_wait_ms(100);
-                    gpio_put(LED_PIN, 0);
-                break;
-            }
-            
-            busy_wait_ms(200);
-            gpio_put(LED_PIN, 1);
-
-            printf("Edit Mode. New Wave = %2d\n", current_wave);
-
-            struct MIDI_MESSAGE wave_change;
-            wave_change.length = STD_MSG_LEN;
-
-            wave_change.payload[1] = 0x00;      // Controller number
-            wave_change.payload[2] = current_wave;
-
-            while(!gpio_get(ENCODER_BUTTON)){
-                if(!gpio_get(NOTE_C_LOWER)){
-                wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x00);
-                send_midi_message(uart0, &wave_change);
-                busy_wait_ms(100);    
-                } else
-                if(!gpio_get(NOTE_D)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x01);
-                    send_midi_message(uart0, &wave_change);
-                    busy_wait_ms(100);
-                } else
-                if(!gpio_get(NOTE_E)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x02);
-                    send_midi_message(uart0, &wave_change);
-                    busy_wait_ms(100);
-                } else
-                if(!gpio_get(NOTE_F)){
-                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x03);
-                    send_midi_message(uart0, &wave_change);
-                    busy_wait_ms(100);
-                } else
-
-                if(!gpio_get(NOTE_C_UPPER)){        // Octave up
-                    //if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
-                    multicore_fifo_push_blocking(1);
-                    busy_wait_ms(300);
-                } else
-                if(!gpio_get(NOTE_B)){              // Octave Down
-                    //if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
-                    multicore_fifo_push_blocking(-1);
-                    busy_wait_ms(300);
-                }
-            }
-            
-
-            if(current_wave < 3) current_wave += 1;
-            else current_wave = 0;
-
-            busy_wait_ms(10);
-        
-        } else {
-            if(gpio_get(LED_PIN)) gpio_put(LED_PIN, 0);
-        }
-    } 
-
-}
-
-////////////////////// FUNctions //////////////////////////
-
-void setup_i2C(i2c_inst_t* i2c){
-    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(I2C_SCL);
-    gpio_pull_up(I2C_SDA);
-    i2c_init(i2c, FAST_I2C_FREQ);
-    i2c_set_slave_mode(i2c, 0, I2C_ADDR);
-}
-
-void check_configuration(struct KeyboardKeys *keyboard){
-    if(multicore_fifo_rvalid()){
-        int rv = multicore_fifo_pop_blocking();
-
-        if(rv < 0){
-            if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
-        } else {
-            if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
-        }
-    }
-}
-
-
-// Setup for Keyboard Buttons
-//  Button press pulls pin low, triggers ISR
-
-void setup_Keyboard_Keys(struct KeyboardKeys *keystruct){
     gpio_init_mask(keystruct->key_mask);
     gpio_set_dir_in_masked(keystruct->key_mask);
     
@@ -367,8 +277,6 @@ int8_t channel_arbitration(struct VoiceStates *voices, uint8_t pin_requesting, u
     // Operations: 1 -> Claim Voice, 0 -> Release Voice
     int8_t ret_channel = -1;
 
-  //  printf("Pin %2d Requesting %s\t", pin_requesting, ((operation != 0) ? "Claim" : "Free "));
-
 
     if(operation){                              // Claim new, or reclaim existing channel
         for(int8_t n = 0; n < NUM_VOICES; n++){
@@ -410,14 +318,7 @@ uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboar
                     msg.payload[1] = (keyboard->key_note[n - LOW_PIN]) + (keyboard->current_octave * 0x0C);     // key pressed is an offset from base C note (set by octave selection)
                     msg.payload[2] = keyboard->key_velocity[(n - LOW_PIN)];                                     // If velocity is enabled, apply here
                     send_midi_message(uart0, &msg);
-      //              printf("Channel %1d %s: 0x%02X  0x%02X  0x%02X\n", ch_arb, (((msg.payload[0] & 0xF0) == NOTE_ON) ? "Assigned" : "Released"), msg.payload[0], msg.payload[1], msg.payload[2]);
-                } else {
-      //              printf("Channel Arbitration Failed! Code: 0x%02X\n", ch_arb);
                 }
-
-                
-                //printf("Send: %s (0x%02X)\tNote: 0x%02X\tPin Read: 0x%08X\tChanged: 0x%08X\tMask: 0x%08X\tRead Key %2d = %1d\n", (((msg.payload[0] & 0xF0) == NOTE_ON) ? "NOTE ON " : "NOTE OFF"), msg.payload[0], msg.payload[1], gpio_vals, changed_pins, keyboard->key_mask, keyboard->key_gpio[(n - LOW_PIN)], gpio_get(keyboard->key_gpio[(n - LOW_PIN)])); 
-                //printf("Send: %s (0x%02X)\tNote: 0x%02X\tPin Read: 0x%08X\tChanged: 0x%08X\tMask: 0x%08X\tRead Key %2d = %1d, Offset: %d\n", (((msg.payload[0] & 0xF0) == NOTE_ON) ? "NOTE ON " : "NOTE OFF"), msg.payload[0], msg.payload[1], gpio_vals, changed_pins, keyboard->key_mask, n, gpio_get(n), keyboard->key_note[n - LOW_PIN]); 
             }
         }
 
@@ -425,4 +326,123 @@ uint32_t process_keyboard_inputs(uart_inst_t *uart, struct KeyboardKeys *keyboar
     }
 
     return retval;
+}
+
+void check_for_encoder_press(struct KeyboardKeys *keyboard){
+    static uint8_t current_wave = 0;
+
+    if(!gpio_get(ENCODER_BUTTON)){                  // Enter set wave mode
+             /*
+                0   Sin
+                1   Tri
+                2   Square
+                3   Saw
+            */
+            gpio_put(LED_PIN, 1);
+            busy_wait_ms(300);
+            gpio_put(LED_PIN, 0);
+
+            switch(current_wave){
+                case 0:                     // 1 beep for sin
+                    busy_wait_ms(500);
+                    gpio_put(LED_PIN, 1);
+                break;
+
+                case 1:                     // 2 beeps for tri
+                    busy_wait_ms(250);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(250);
+                    gpio_put(LED_PIN, 0);
+                break;
+
+                case 2:                     // 3 beeps for square
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(150);
+                    gpio_put(LED_PIN, 0);
+                break;
+
+                case 3:                     // 4 beeps for saw
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 1);
+                    busy_wait_ms(100);
+                    gpio_put(LED_PIN, 0);
+                break;
+            }
+            
+            busy_wait_ms(200);
+            gpio_put(LED_PIN, 1);
+
+            printf("Edit Mode. New Wave = %2d\n", current_wave);
+
+            struct MIDI_MESSAGE wave_change;
+            wave_change.length = STD_MSG_LEN;
+
+            wave_change.payload[1] = 0x00;      // Controller number
+            wave_change.payload[2] = current_wave;
+
+            while(!gpio_get(ENCODER_BUTTON)){
+                uint8_t rv = 0;
+
+                if(!gpio_get(NOTE_C_LOWER)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x00);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);    
+                } else
+                if(!gpio_get(NOTE_D)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x01);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                } else
+                if(!gpio_get(NOTE_E)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x02);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                } else
+                if(!gpio_get(NOTE_F)){
+                    wave_change.payload[0] = CREATE_CMD(CTRL_CHANGE, 0x03);
+                    send_midi_message(uart0, &wave_change);
+                    busy_wait_ms(100);
+                } else
+
+                if(!gpio_get(NOTE_C_UPPER)){        // Octave up
+                    //if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+                    rv = 1;
+                    busy_wait_ms(300);
+                } else
+                if(!gpio_get(NOTE_B)){              // Octave Down
+                    //if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
+                    rv = -1;
+                    busy_wait_ms(300);
+                }
+
+                if(rv < 0){
+                    if(keyboard->current_octave > OCTAVE_1) keyboard->current_octave -= 1;
+                } else 
+                if(rv) {
+                    if(keyboard->current_octave < OCTAVE_8) keyboard->current_octave += 1;
+                }
+            }
+            
+
+            if(current_wave < 3) current_wave += 1;
+            else current_wave = 0;
+
+            busy_wait_ms(10);
+        
+        } else {
+            if(gpio_get(LED_PIN)) gpio_put(LED_PIN, 0);
+        }
 }
