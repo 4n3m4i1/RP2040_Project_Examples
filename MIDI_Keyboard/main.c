@@ -150,6 +150,9 @@ void core_1_entry(){        // Main for Core 1, Motor PWM driven here
 ////////////////////// FUNctions //////////////////////////
 void midi_task(uart_inst_t *uart){
 // This does not work
+//  who knows why...
+//
+// https://github.com/hathach/tinyusb/blob/master/src/class/midi/midi_device.c
     uint8_t packet[4];
     while ( tud_midi_available() ) tud_midi_packet_read(packet);
 
